@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Tracker & Live Revenue</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-amber-50 text-gray-800 min-h-screen p-4 flex flex-col items-center">
+
+    <!-- Revenue Dashboard Header (Realtime Auto-Calculated) -->
+    <div class="w-full max-w-2xl bg-white p-5 rounded-2xl shadow-md border border-amber-200 mb-6 mt-2">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <div>
+                <h1 class="text-xs font-bold text-amber-700 uppercase tracking-wider">⚡ Live Business Dashboard</h1>
+                <p id="tracker-title" class="text-lg font-bold text-gray-900">Realtime Revenue Tracker</p>
+            </div>
+            <span class="inline-flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-2.5 py-1 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Sync
+            </span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 text-center">
+            <div class="bg-green-50 p-3 rounded-xl border border-green-200">
+                <span class="text-[11px] font-bold text-green-700 uppercase block">Total Revenue</span>
+                <span id="stat-revenue" class="text-base sm:text-xl font-extrabold text-green-800">RM 0.00</span>
+            </div>
+            <div class="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                <span class="text-[11px] font-bold text-amber-700 uppercase block">On Hold</span>
+                <span id="stat-onhold" class="text-base sm:text-xl font-extrabold text-amber-800">0</span>
+            </div>
+            <div class="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                <span class="text-[11px] font-bold text-blue-700 uppercase block">Completed</span>
+                <span id="stat-completed" class="text-base sm:text-xl font-extrabold text-blue-800">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Order Lookup Area -->
+    <main class="w-full max-w-2xl bg-white p-6 rounded-2xl shadow-md border border-amber-200">
+        <div class="space-y-3 mb-6">
+            <label class="block text-sm font-bold text-amber-900">🔍 Track Your Order Status</label>
+            <div class="flex gap-2">
+                <!-- Input field with fixed ORD- prefix -->
+                <div class="flex w-full border rounded-xl overflow-hidden bg-amber-50/50 focus-within:ring-2 focus-within:ring-amber-500">
+                    <span class="bg-amber-200/60 text-amber-900 px-3 py-3 font-extrabold text-sm flex items-center select-none border-r border-amber-200">
+                        ORD-
+                    </span>
+                    <input type="text" id="order-number-input" placeholder="4077" class="w-full p-3 text-sm bg-transparent focus:outline-none font-bold text-gray-800">
+                </div>
+                <button onclick="trackByOrderId()" class="bg-amber-700 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-amber-800 transition shadow-sm whitespace-nowrap">
+                    Track
+                </button>
+            </div>
+            <p id="search-error" class="text-xs text-red-600 hidden font-medium"></p>
+        </div>
+
+        <hr class="border-gray-100 my-4">
+
+        <!-- Result Section -->
+        <div id="tracking-results" class="hidden"></div>
+
+        <!-- Blank Prompt State -->
+        <div id="empty-state" class="text-center py-8 text-gray-400 text-sm">
+            <span class="text-3xl block mb-2">📦</span>
+            Enter your <b>Order Number</b> above (e.g., 4077) to view live progress.
+        </div>
+    </main>
+
+    <!-- JS Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDgcBDdJaGkEBS1ihJASDAayNHWgrJ-UN8",
+            authDomain: "deepavalicookies2026.firebaseapp.com",
+            databaseURL: "https://deepavalicookies2026-default-rtdb.firebaseio.com/",
+            projectId: "deepavalicookies2026",
+            storageBucket: "deepavalicookies2026.firebasestorage.app",
+            messagingSenderId: "648876725443",
+            appId: "1:648876725443:web:beabca40332d99f90fbe76",
+            measurementId: "G-CH5L1EP9SK"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let allOrders = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Realtime listener across all orders for automatic revenue computation
+            onSnapshot(collection(db, "orders"), (snapshot) => {
+                allOrders = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+                calculateRevenueAndStats();
+
+                // Re-trigger search rendering if user already searched for an order
+                const currentInput = document.getElementById('order-number-input').value.trim();
+                if (currentInput) {
+                    trackByOrderId();
+                }
+            });
+
+            // Store Title Sync
+            onSnapshot(doc(db, "settings", "store"), (docSnap) => {
+                if (docSnap.exists() && docSnap.data().title) {
+                    document.getElementById('tracker-title').innerText = `${docSnap.data().title} - Order Tracker`;
+                }
+            });
+
+            // Allow pressing 'Enter' key to track
+            document.getElementById('order-number-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') trackByOrderId();
+            });
+        });
+
+        // Auto-calculates revenue dynamically
+        function calculateRevenueAndStats() {
+            let totalRevenue = 0;
+            let onHoldCount = 0;
+            let completedCount = 0;
+
+            allOrders.forEach(order => {
+                const status = order.status;
+                const orderTotal = Number(order.total) || 0;
+
+                if (status === 'Shipped / Completed') {
+                    totalRevenue += orderTotal;
+                    completedCount++;
+                } else if (status === 'Pending Payment' || status === 'Paid & Preparing') {
+                    onHoldCount++;
+                }
+                // Cancelled orders are ignored here (automatically deducting/excluding them from revenue)
+            });
+
+            document.getElementById('stat-revenue').innerText = `RM ${totalRevenue.toFixed(2)}`;
+            document.getElementById('stat-onhold').innerText = onHoldCount;
+            document.getElementById('stat-completed').innerText = completedCount;
+        }
+
+        window.trackByOrderId = function() {
+            const rawInput = document.getElementById('order-number-input').value.trim();
+            const errorEl = document.getElementById('search-error');
+            const resultsContainer = document.getElementById('tracking-results');
+            const emptyState = document.getElementById('empty-state');
+
+            if (!rawInput) {
+                errorEl.innerText = "Please enter your order number (e.g. 4077).";
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            errorEl.classList.add('hidden');
+
+            // Format full Order ID with ORD- prefix automatically
+            const targetOrderId = `ord-${rawInput.toLowerCase().replace('ord-', '')}`;
+
+            const matchedOrder = allOrders.find(o => (o.orderId || '').toLowerCase() === targetOrderId);
+
+            if (!matchedOrder) {
+                emptyState.innerHTML = `<span class="text-2xl block mb-1">❌</span> Order "<b>${targetOrderId.toUpperCase()}</b>" was not found.`;
+                emptyState.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                resultsContainer.classList.remove('hidden');
+                renderSingleOrder(matchedOrder);
+            }
+        }
+
+        function getStatusStep(status) {
+            switch (status) {
+                case 'Pending Payment': return 1;
+                case 'Paid & Preparing': return 2;
+                case 'Shipped / Completed': return 3;
+                case 'Cancelled': return -1;
+                default: return 1;
+            }
+        }
+
+        function renderSingleOrder(order) {
+            const container = document.getElementById('tracking-results');
+            const step = getStatusStep(order.status);
+            const isCancelled = step === -1;
+
+            let itemsHtml = order.items.map(i => `
+                <div class="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                    <span>${i.name} (x${i.qty})</span>
+                    <span class="font-semibold text-gray-700">RM ${(i.price * i.qty).toFixed(2)}</span>
+                </div>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="bg-amber-50/50 p-5 rounded-xl border border-amber-200 shadow-sm space-y-4">
+                    <div class="flex justify-between items-start border-b border-amber-200 pb-3">
+                        <div>
+                            <span class="bg-amber-800 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">${order.orderId}</span>
+                            <h3 class="font-bold text-md text-amber-950 mt-2">${order.name}</h3>
+                            <p class="text-xs text-gray-500">${order.date || ''}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-base font-extrabold text-amber-900 block">RM ${Number(order.total).toFixed(2)}</span>
+                            <span class="text-xs font-bold ${isCancelled ? 'text-red-700 bg-red-100' : 'text-amber-800 bg-amber-100'} px-2.5 py-1 rounded-lg inline-block mt-1">
+                                ${order.status}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Progress Step Tracker -->
+                    ${!isCancelled ? `
+                        <div class="py-2">
+                            <div class="flex justify-between text-[11px] font-bold mb-2">
+                                <span class="${step >= 1 ? 'text-amber-800' : 'text-gray-400'}">1. Order Placed (On Hold)</span>
+                                <span class="${step >= 2 ? 'text-amber-800' : 'text-gray-400'}">2. Preparing</span>
+                                <span class="${step >= 3 ? 'text-green-700' : 'text-gray-400'}">3. Delivered (Revenue Added)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden flex">
+                                <div class="bg-amber-600 h-2.5 transition-all duration-500 rounded-full" style="width: ${step === 1 ? '33%' : step === 2 ? '66%' : '100%'}"></div>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="p-3 bg-red-100/70 rounded-lg text-xs text-red-700 font-medium text-center">
+                            🔴 Order Cancelled. Removed from revenue calculations.
+                        </div>
+                    `}
+
+                    <!-- Order Items Breakdown -->
+                    <div class="bg-white p-3 rounded-lg border border-amber-100">
+                        <p class="text-xs font-bold text-amber-900 mb-2">Order Items Summary:</p>
+                        ${itemsHtml}
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
