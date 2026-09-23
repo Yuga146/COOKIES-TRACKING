@@ -77,6 +77,19 @@
             <p id="search-error" class="text-xs text-red-600 dark:text-rose-400 hidden font-medium pl-1"></p>
         </div>
 
+        <!-- Sorting Alignment Controls -->
+        <div id="sort-controls" class="flex justify-between items-center bg-amber-50/60 dark:bg-zinc-950/50 p-2.5 rounded-2xl border border-amber-200/80 dark:border-zinc-800 mb-4">
+            <span class="text-xs font-bold text-amber-900 dark:text-amber-300/80 pl-2">Sort Alignment:</span>
+            <div class="flex gap-1.5">
+                <button onclick="setSortOrder('asc')" id="btn-sort-asc" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50">
+                    ⬆️ Ascending (0-9)
+                </button>
+                <button onclick="setSortOrder('desc')" id="btn-sort-desc" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800">
+                    ⬇️ Descending (9-0)
+                </button>
+            </div>
+        </div>
+
         <hr class="border-gray-100 dark:border-zinc-800 my-5">
 
         <!-- Tracking / All Orders Display -->
@@ -110,6 +123,7 @@
 
         let allOrders = [];
         let showingAll = false;
+        let currentSortOrder = 'asc'; // Default sort alignment: Ascending (0-9)
 
         // Theme Toggle Function
         window.toggleTheme = function() {
@@ -130,7 +144,25 @@
             }
         };
 
-        // Initialize Theme preference from local storage
+        // Sort Control Switcher
+        window.setSortOrder = function(order) {
+            currentSortOrder = order;
+            const btnAsc = document.getElementById('btn-sort-asc');
+            const btnDesc = document.getElementById('btn-sort-desc');
+
+            if (order === 'asc') {
+                btnAsc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50";
+                btnDesc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800";
+            } else {
+                btnDesc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50";
+                btnAsc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800";
+            }
+
+            if (showingAll) {
+                renderOrdersList(allOrders);
+            }
+        };
+
         if (localStorage.getItem('theme') === 'dark') {
             document.documentElement.classList.add('dark');
             document.getElementById('theme-icon').innerText = "☀️";
@@ -138,7 +170,6 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Realtime Orders Listener
             onSnapshot(collection(db, "orders"), (snapshot) => {
                 allOrders = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
                 document.getElementById('total-orders-count').innerText = allOrders.length;
@@ -153,14 +184,12 @@
                 }
             });
 
-            // Sync Store Name
             onSnapshot(doc(db, "settings", "store"), (docSnap) => {
                 if (docSnap.exists() && docSnap.data().title) {
                     document.getElementById('tracker-title').innerText = `${docSnap.data().title} - Order Tracker`;
                 }
             });
 
-            // Enter Key Search Listener
             document.getElementById('order-number-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') trackByOrderId();
             });
@@ -170,19 +199,33 @@
             return order.status || order.orderStatus || order.process || 'Pending Payment';
         }
 
+        function isOrderCompleted(statusStr) {
+            if (!statusStr) return false;
+            const s = statusStr.toString().toLowerCase();
+            return (
+                s.includes('shipped') ||
+                s.includes('complete') ||
+                s.includes('completed') ||
+                s.includes('delivered') ||
+                s.includes('done') ||
+                s.includes('paid')
+            );
+        }
+
         function calculateRevenueAndStats() {
             let totalRevenue = 0;
             let onHoldCount = 0;
             let completedCount = 0;
 
             allOrders.forEach(order => {
-                const status = getOrderStatus(order).toLowerCase();
-                const orderTotal = Number(order.total) || 0;
+                const status = getOrderStatus(order);
+                const statusLower = status.toLowerCase();
+                const orderTotal = Number(order.total) || Number(order.grandTotal) || Number(order.amount) || 0;
 
-                if (status.includes('shipped') || status.includes('complete') || status.includes('delivered')) {
+                if (isOrderCompleted(status)) {
                     totalRevenue += orderTotal;
                     completedCount++;
-                } else if (!status.includes('cancel')) {
+                } else if (!statusLower.includes('cancel')) {
                     onHoldCount++;
                 }
             });
@@ -261,31 +304,42 @@
             if (!statusStr) return 1;
             const s = statusStr.toString().toLowerCase();
             if (s.includes('cancel')) return -1;
-            if (s.includes('shipped') || s.includes('complete') || s.includes('delivered')) return 3;
-            if (s.includes('paid') || s.includes('prepare') || s.includes('preparing')) return 2;
+            if (isOrderCompleted(statusStr)) return 3;
+            if (s.includes('prepare') || s.includes('preparing') || s.includes('processing')) return 2;
             return 1;
+        }
+
+        function extractNumericCode(order) {
+            const codeStr = (order.orderId || order.orderCode || order.code || order.id || '0').toString();
+            const numbersOnly = codeStr.replace(/\D/g, '');
+            return numbersOnly ? parseInt(numbersOnly, 10) : 0;
         }
 
         function renderOrdersList(ordersToRender) {
             const container = document.getElementById('tracking-results');
             container.innerHTML = '';
 
-            const sorted = [...ordersToRender].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            // Sort orders numerically based on active sort order choice
+            const sorted = [...ordersToRender].sort((a, b) => {
+                const numA = extractNumericCode(a);
+                const numB = extractNumericCode(b);
+                return currentSortOrder === 'asc' ? numA - numB : numB - numA;
+            });
 
             sorted.forEach(order => {
-                // Flexible field mappings to resolve 'undefined' values
                 const orderIdDisplay = order.orderId || order.orderCode || order.code || order.id || 'N/A';
                 const customerName = order.name || order.customerName || order.fullName || order.userName || 'Guest Customer';
                 const orderStatus = getOrderStatus(order);
                 const phone = order.phone || order.phoneNumber || order.mobile || '';
+                const orderTotal = Number(order.total) || Number(order.grandTotal) || Number(order.amount) || 0;
 
                 const step = getStatusStep(orderStatus);
                 const isCancelled = step === -1;
 
                 let itemsHtml = (order.items || []).map(i => `
                     <div class="flex justify-between text-xs py-1.5 border-b border-gray-100 dark:border-zinc-800/60 last:border-0">
-                        <span class="text-gray-700 dark:text-zinc-300">${i.name} <span class="text-amber-800 dark:text-amber-400/80 font-semibold">(x${i.qty})</span></span>
-                        <span class="font-semibold text-gray-800 dark:text-amber-200/90">RM ${(i.price * i.qty).toFixed(2)}</span>
+                        <span class="text-gray-700 dark:text-zinc-300">${i.name || i.title || 'Item'} <span class="text-amber-800 dark:text-amber-400/80 font-semibold">(x${i.qty || i.quantity || 1})</span></span>
+                        <span class="font-semibold text-gray-800 dark:text-amber-200/90">RM ${((i.price || 0) * (i.qty || i.quantity || 1)).toFixed(2)}</span>
                     </div>
                 `).join('');
 
@@ -298,7 +352,7 @@
                                 <p class="text-[11px] text-gray-500 dark:text-zinc-500 mt-0.5">${order.date || ''}</p>
                             </div>
                             <div class="text-right">
-                                <span class="text-base sm:text-lg font-extrabold text-amber-900 dark:text-amber-400 block">RM ${Number(order.total || 0).toFixed(2)}</span>
+                                <span class="text-base sm:text-lg font-extrabold text-amber-900 dark:text-amber-400 block">RM ${orderTotal.toFixed(2)}</span>
                                 <span class="text-[11px] font-semibold ${isCancelled ? 'text-red-700 bg-red-100 dark:text-rose-400 dark:bg-rose-950/60 dark:border dark:border-rose-800/40' : 'text-amber-800 bg-amber-100 dark:text-amber-300 dark:bg-amber-950/60 dark:border dark:border-amber-500/30'} px-2.5 py-1 rounded-lg inline-block mt-1.5">
                                     ${orderStatus}
                                 </span>
@@ -326,7 +380,7 @@
                         <!-- Items Breakdown -->
                         <div class="bg-white dark:bg-zinc-900/80 p-3.5 rounded-xl border border-amber-100 dark:border-zinc-800">
                             <p class="text-[11px] font-bold text-amber-900 dark:text-amber-400/90 uppercase tracking-wider mb-1.5">Order Items Summary</p>
-                            ${itemsHtml}
+                            ${itemsHtml || '<span class="text-xs text-gray-400">No items specified</span>'}
                         </div>
                     </div>
                 `;
