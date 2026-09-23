@@ -14,9 +14,9 @@
 </head>
 <body id="app-body" class="bg-amber-50 text-gray-800 dark:bg-zinc-950 dark:text-zinc-100 min-h-screen p-4 flex flex-col items-center font-sans antialiased transition-colors duration-300">
 
-    <!-- Theme Toggle Floating Bar -->
+    <!-- Theme Switcher Top Bar -->
     <div class="w-full max-w-2xl flex justify-end mb-2">
-        <button onclick="toggleTheme()" class="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-500/20 px-3 py-1.5 rounded-full shadow-sm text-xs font-bold text-amber-900 dark:text-amber-300 hover:scale-105 transition-all cursor-pointer">
+        <button onclick="toggleTheme()" class="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-500/20 px-3.5 py-1.5 rounded-full shadow-sm text-xs font-bold text-amber-900 dark:text-amber-300 hover:scale-105 transition-all cursor-pointer">
             <span id="theme-icon">🌙</span>
             <span id="theme-text">Dark Mode</span>
         </button>
@@ -111,7 +111,7 @@
         let allOrders = [];
         let showingAll = false;
 
-        // Theme Toggle Logic
+        // Theme Toggle Function
         window.toggleTheme = function() {
             const html = document.documentElement;
             const icon = document.getElementById('theme-icon');
@@ -130,7 +130,7 @@
             }
         };
 
-        // Initialize Theme from LocalStorage
+        // Initialize Theme preference from local storage
         if (localStorage.getItem('theme') === 'dark') {
             document.documentElement.classList.add('dark');
             document.getElementById('theme-icon').innerText = "☀️";
@@ -160,7 +160,7 @@
                 }
             });
 
-            // Enter Key Search
+            // Enter Key Search Listener
             document.getElementById('order-number-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') trackByOrderId();
             });
