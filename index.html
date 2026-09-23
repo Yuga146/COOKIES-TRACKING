@@ -68,12 +68,12 @@
                     <span class="bg-amber-200/60 dark:bg-amber-500/10 text-amber-900 dark:text-amber-300 px-3 py-3 font-extrabold text-xs flex items-center select-none border-r border-amber-200 dark:border-zinc-800">
                         ORD / ID
                     </span>
-                    <input type="text" id="order-number-input" placeholder="4077 or customer name..." class="w-full p-3 text-sm bg-transparent text-gray-800 dark:text-amber-100 placeholder-gray-400 dark:placeholder-zinc-600 focus:outline-none font-bold">
+                    <input type="text" id="order-number-input" placeholder="Enter Order Code or Customer Name..." class="w-full p-3 text-sm bg-transparent text-gray-800 dark:text-amber-100 placeholder-gray-400 dark:placeholder-zinc-600 focus:outline-none font-bold">
                 </div>
 
-                <!-- Date Filter Input -->
-                <div class="flex border border-gray-200 dark:border-zinc-700/80 rounded-2xl overflow-hidden bg-amber-50/50 dark:bg-zinc-950/80 focus-within:ring-2 focus-within:ring-amber-500 dark:focus-within:border-amber-500/70 transition sm:w-56">
-                    <input type="date" id="order-date-input" class="w-full p-3 text-xs bg-transparent text-gray-800 dark:text-amber-100 focus:outline-none font-bold cursor-pointer">
+                <!-- Date Filter Input (Visible ONLY when View All Orders is Active) -->
+                <div id="date-filter-wrapper" class="hidden border border-gray-200 dark:border-zinc-700/80 rounded-2xl overflow-hidden bg-amber-50/50 dark:bg-zinc-950/80 focus-within:ring-2 focus-within:ring-amber-500 dark:focus-within:border-amber-500/70 transition sm:w-56">
+                    <input type="date" id="order-date-input" title="Filter by date" class="w-full p-3 text-xs bg-transparent text-gray-800 dark:text-amber-100 focus:outline-none font-bold cursor-pointer">
                 </div>
 
                 <button onclick="executeSearch()" class="bg-amber-700 dark:bg-gradient-to-r dark:from-amber-600 dark:to-amber-700 hover:bg-amber-800 dark:hover:from-amber-500 dark:hover:to-amber-600 text-white dark:text-zinc-950 font-bold px-6 py-3 rounded-2xl text-sm transition shadow-sm dark:shadow-lg whitespace-nowrap">
@@ -83,17 +83,12 @@
             <p id="search-error" class="text-xs text-red-600 dark:text-rose-400 hidden font-medium pl-1"></p>
         </div>
 
-        <!-- Sorting Alignment Controls -->
+        <!-- Sorting Alignment Controls (1 Single Toggle Button) -->
         <div id="sort-controls" class="flex justify-between items-center bg-amber-50/60 dark:bg-zinc-950/50 p-2.5 rounded-2xl border border-amber-200/80 dark:border-zinc-800 mb-4">
             <span class="text-xs font-bold text-amber-900 dark:text-amber-300/80 pl-2">Sort Alignment:</span>
-            <div class="flex gap-1.5">
-                <button onclick="setSortOrder('asc')" id="btn-sort-asc" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50">
-                    ⬆️ Ascending (0-9)
-                </button>
-                <button onclick="setSortOrder('desc')" id="btn-sort-desc" class="text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800">
-                    ⬇️ Descending (9-0)
-                </button>
-            </div>
+            <button onclick="toggleSortOrder()" id="sort-toggle-btn" class="text-xs font-bold px-3.5 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50">
+                ⬆️ Ascending (Oldest to Newest)
+            </button>
         </div>
 
         <hr class="border-gray-100 dark:border-zinc-800 my-5">
@@ -104,7 +99,7 @@
         <!-- Blank State -->
         <div id="empty-state" class="text-center py-10 text-gray-400 dark:text-zinc-500 text-sm font-light">
             <span class="text-3xl block mb-2">📦</span>
-            Enter an order number or pick a date above, or click <b class="text-gray-600 dark:text-amber-200/80">"View All Orders"</b>.
+            Enter an order number above, or click <b class="text-gray-600 dark:text-amber-200/80">"View All Orders"</b>.
         </div>
     </main>
 
@@ -128,8 +123,9 @@
         const db = getFirestore(app);
 
         let allOrders = [];
+        let activeOrdersList = [];
         let showingAll = false;
-        let currentSortOrder = 'asc';
+        let isAscending = true; // true = Oldest to Newest, false = Newest to Oldest
 
         window.toggleTheme = function() {
             const html = document.documentElement;
@@ -149,23 +145,16 @@
             }
         };
 
-        window.setSortOrder = function(order) {
-            currentSortOrder = order;
-            const btnAsc = document.getElementById('btn-sort-asc');
-            const btnDesc = document.getElementById('btn-sort-desc');
-
-            if (order === 'asc') {
-                btnAsc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50";
-                btnDesc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800";
+        window.toggleSortOrder = function() {
+            isAscending = !isAscending;
+            const btn = document.getElementById('sort-toggle-btn');
+            if (isAscending) {
+                btn.innerText = "⬆️ Ascending (Oldest to Newest)";
             } else {
-                btnDesc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-amber-200 dark:bg-amber-500/30 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-500/50";
-                btnAsc.className = "text-xs font-bold px-3 py-1.5 rounded-xl border transition bg-white dark:bg-zinc-900 text-gray-600 dark:text-zinc-400 border-gray-200 dark:border-zinc-800";
+                btn.innerText = "⬇️ Descending (Newest to Oldest)";
             }
-
-            if (showingAll) {
-                renderOrdersList(allOrders);
-            } else {
-                executeSearch();
+            if (activeOrdersList.length > 0) {
+                renderOrdersList(activeOrdersList);
             }
         };
 
@@ -182,11 +171,9 @@
                 
                 calculateRevenueAndStats();
 
-                const currentInput = document.getElementById('order-number-input').value.trim();
-                const currentDate = document.getElementById('order-date-input').value;
                 if (showingAll) {
-                    renderOrdersList(allOrders);
-                } else if (currentInput || currentDate) {
+                    filterAndRenderViewAll();
+                } else if (document.getElementById('order-number-input').value.trim()) {
                     executeSearch();
                 }
             });
@@ -200,10 +187,26 @@
             document.getElementById('order-number-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') executeSearch();
             });
+
             document.getElementById('order-date-input').addEventListener('change', () => {
-                executeSearch();
+                if (showingAll) {
+                    filterAndRenderViewAll();
+                }
             });
         });
+
+        // Helper: Calculate total price of an order reliably
+        function calculateOrderTotal(order) {
+            let total = Number(order.total) || Number(order.grandTotal) || Number(order.amount) || 0;
+            if (total === 0 && Array.isArray(order.items) && order.items.length > 0) {
+                total = order.items.reduce((sum, item) => {
+                    const price = Number(item.price) || 0;
+                    const qty = Number(item.qty || item.quantity) || 1;
+                    return sum + (price * qty);
+                }, 0);
+            }
+            return total;
+        }
 
         function getOrderStatus(order) {
             return order.status || order.orderStatus || order.process || 'Pending Payment';
@@ -230,7 +233,7 @@
             allOrders.forEach(order => {
                 const status = getOrderStatus(order);
                 const statusLower = status.toLowerCase();
-                const orderTotal = Number(order.total) || Number(order.grandTotal) || Number(order.amount) || 0;
+                const orderTotal = calculateOrderTotal(order);
 
                 if (isOrderCompleted(status)) {
                     totalRevenue += orderTotal;
@@ -245,23 +248,30 @@
             document.getElementById('stat-completed').innerText = completedCount;
         }
 
-        // Formats Firestore or epoch timestamp into readable Date & Time
-        function formatOrderDateTime(order) {
-            let dateObj = null;
-
-            if (order.createdAt && typeof order.createdAt.toDate === 'function') {
-                dateObj = order.createdAt.toDate();
-            } else if (order.timestamp) {
-                dateObj = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp.seconds * 1000);
-            } else if (order.date) {
-                if (order.time) {
-                    dateObj = new Date(`${order.date} ${order.time}`);
-                } else {
-                    dateObj = new Date(order.date);
-                }
+        // Extracts Date Object reliably from any schema
+        function getOrderDateObject(order) {
+            const raw = order.createdAt || order.timestamp || order.date || order.orderDate || order.created_at;
+            
+            if (raw && typeof raw.toDate === 'function') {
+                return raw.toDate();
             }
+            if (raw && raw.seconds) {
+                return new Date(raw.seconds * 1000);
+            }
+            if (typeof raw === 'number') {
+                return new Date(raw);
+            }
+            if (typeof raw === 'string') {
+                const combined = order.time ? `${raw} ${order.time}` : raw;
+                const parsed = new Date(combined);
+                if (!isNaN(parsed.getTime())) return parsed;
+            }
+            return null;
+        }
 
-            if (!dateObj || isNaN(dateObj.getTime())) {
+        function formatOrderDateTime(order) {
+            const dateObj = getOrderDateObject(order);
+            if (!dateObj) {
                 return order.date ? `${order.date} ${order.time || ''}`.trim() : 'Date unavailable';
             }
 
@@ -275,59 +285,48 @@
             });
         }
 
+        // Gets primary display code (e.g. ORD-8397)
+        function getPrimaryOrderCode(order) {
+            return order.orderId || order.orderCode || order.code || order.id || 'N/A';
+        }
+
         window.executeSearch = function() {
             showingAll = false;
+            document.getElementById('date-filter-wrapper').classList.add('hidden');
             document.getElementById('toggle-view-btn').innerText = `📋 View All Orders (${allOrders.length})`;
             
             const rawInput = document.getElementById('order-number-input').value.trim().toLowerCase();
-            const dateInput = document.getElementById('order-date-input').value; // YYYY-MM-DD
             const errorEl = document.getElementById('search-error');
             const resultsContainer = document.getElementById('tracking-results');
             const emptyState = document.getElementById('empty-state');
 
-            if (!rawInput && !dateInput) {
-                errorEl.innerText = "Please enter an order ID/name or select a date.";
+            if (!rawInput) {
+                errorEl.innerText = "Please enter an order ID or customer name.";
                 errorEl.classList.remove('hidden');
                 return;
             }
 
             errorEl.classList.add('hidden');
-
             const cleanInput = rawInput.replace('ord-', '');
 
             const matches = allOrders.filter(o => {
                 const docId = (o.id || '').toString().toLowerCase();
-                const oCode = (o.orderId || o.orderCode || o.code || '').toString().toLowerCase();
+                const oCode = getPrimaryOrderCode(o).toString().toLowerCase();
                 const name = (o.name || o.customerName || o.fullName || '').toString().toLowerCase();
                 const phone = (o.phone || o.phoneNumber || '').toString().toLowerCase();
-                const dateTimeStr = formatOrderDateTime(o).toLowerCase();
 
-                // Text query match
-                let textMatch = true;
-                if (rawInput) {
-                    textMatch = docId.includes(rawInput) ||
-                                oCode.includes(rawInput) ||
-                                oCode.includes(cleanInput) ||
-                                name.includes(rawInput) ||
-                                phone.includes(rawInput);
-                }
-
-                // Date filter match
-                let dateMatch = true;
-                if (dateInput) {
-                    // Check standard date formats matching ISO YYYY-MM-DD
-                    const orderFormatted = formatOrderDateTime(o);
-                    dateMatch = dateTimeStr.includes(dateInput) || 
-                                (o.date && o.date.includes(dateInput));
-                }
-
-                return textMatch && dateMatch;
+                return docId.includes(rawInput) ||
+                       oCode.includes(rawInput) ||
+                       oCode.includes(cleanInput) ||
+                       name.includes(rawInput) ||
+                       phone.includes(rawInput);
             });
 
             if (matches.length === 0) {
-                emptyState.innerHTML = `<span class="text-3xl block mb-2 opacity-60">❌</span> No orders matching your query were found.`;
+                emptyState.innerHTML = `<span class="text-3xl block mb-2 opacity-60">❌</span> No orders matching "${rawInput}" were found.`;
                 emptyState.classList.remove('hidden');
                 resultsContainer.classList.add('hidden');
+                activeOrdersList = [];
             } else {
                 emptyState.classList.add('hidden');
                 resultsContainer.classList.remove('hidden');
@@ -339,29 +338,68 @@
             const resultsContainer = document.getElementById('tracking-results');
             const emptyState = document.getElementById('empty-state');
             const toggleBtn = document.getElementById('toggle-view-btn');
+            const dateWrapper = document.getElementById('date-filter-wrapper');
 
             if (!showingAll) {
                 showingAll = true;
+                dateWrapper.classList.remove('hidden'); // Enable search by date ONLY for View All
                 document.getElementById('order-number-input').value = '';
-                document.getElementById('order-date-input').value = '';
                 document.getElementById('search-error').classList.add('hidden');
                 toggleBtn.innerText = "🔍 Search Single Order";
 
-                if (allOrders.length === 0) {
-                    emptyState.innerHTML = `<span class="text-3xl block mb-2 opacity-60">📋</span> No orders found in database yet.`;
-                    emptyState.classList.remove('hidden');
-                    resultsContainer.classList.add('hidden');
-                } else {
-                    emptyState.classList.add('hidden');
-                    resultsContainer.classList.remove('hidden');
-                    renderOrdersList(allOrders);
-                }
+                filterAndRenderViewAll();
             } else {
                 showingAll = false;
+                dateWrapper.classList.add('hidden');
                 toggleBtn.innerText = `📋 View All Orders (${allOrders.length})`;
                 resultsContainer.classList.add('hidden');
-                emptyState.innerHTML = `<span class="text-3xl block mb-2">📦</span> Enter an order number or pick a date above, or click <b>"View All Orders"</b>.`;
+                emptyState.innerHTML = `<span class="text-3xl block mb-2">📦</span> Enter an order number above, or click <b>"View All Orders"</b>.`;
                 emptyState.classList.remove('hidden');
+                activeOrdersList = [];
+            }
+        }
+
+        function filterAndRenderViewAll() {
+            const resultsContainer = document.getElementById('tracking-results');
+            const emptyState = document.getElementById('empty-state');
+            const textFilter = document.getElementById('order-number-input').value.trim().toLowerCase();
+            const dateFilter = document.getElementById('order-date-input').value; // YYYY-MM-DD
+
+            let filtered = allOrders.filter(o => {
+                let matchText = true;
+                if (textFilter) {
+                    const cleanText = textFilter.replace('ord-', '');
+                    const docId = (o.id || '').toString().toLowerCase();
+                    const oCode = getPrimaryOrderCode(o).toString().toLowerCase();
+                    const name = (o.name || o.customerName || o.fullName || '').toString().toLowerCase();
+                    matchText = docId.includes(textFilter) || oCode.includes(textFilter) || oCode.includes(cleanText) || name.includes(textFilter);
+                }
+
+                let matchDate = true;
+                if (dateFilter) {
+                    const dObj = getOrderDateObject(o);
+                    if (dObj) {
+                        const isoDate = dObj.toISOString().split('T')[0];
+                        matchDate = isoDate === dateFilter;
+                    } else if (o.date) {
+                        matchDate = o.date.includes(dateFilter);
+                    } else {
+                        matchDate = false;
+                    }
+                }
+
+                return matchText && matchDate;
+            });
+
+            if (filtered.length === 0) {
+                emptyState.innerHTML = `<span class="text-3xl block mb-2 opacity-60">📋</span> No orders found matching criteria.`;
+                emptyState.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                activeOrdersList = [];
+            } else {
+                emptyState.classList.add('hidden');
+                resultsContainer.classList.remove('hidden');
+                renderOrdersList(filtered);
             }
         }
 
@@ -374,30 +412,24 @@
             return 1;
         }
 
-        function extractNumericCode(order) {
-            const codeStr = (order.orderId || order.orderCode || order.code || order.id || '0').toString();
-            const numbersOnly = codeStr.replace(/\D/g, '');
-            return numbersOnly ? parseInt(numbersOnly, 10) : 0;
-        }
-
         function renderOrdersList(ordersToRender) {
+            activeOrdersList = ordersToRender;
             const container = document.getElementById('tracking-results');
             container.innerHTML = '';
 
+            // Sort list by Date (Oldest to Newest vs Newest to Oldest)
             const sorted = [...ordersToRender].sort((a, b) => {
-                const numA = extractNumericCode(a);
-                const numB = extractNumericCode(b);
-                return currentSortOrder === 'asc' ? numA - numB : numB - numA;
+                const dateA = getOrderDateObject(a) ? getOrderDateObject(a).getTime() : 0;
+                const dateB = getOrderDateObject(b) ? getOrderDateObject(b).getTime() : 0;
+                return isAscending ? dateA - dateB : dateB - dateA;
             });
 
             sorted.forEach(order => {
-                // Primary order code, with fallback to document ID
-                const primaryCode = order.orderId || order.orderCode || order.code || order.id || 'N/A';
-                const docId = order.id ? ` (ID: ${order.id})` : '';
+                const primaryCode = getPrimaryOrderCode(order);
                 const customerName = order.name || order.customerName || order.fullName || order.userName || 'Guest Customer';
                 const orderStatus = getOrderStatus(order);
                 const phone = order.phone || order.phoneNumber || order.mobile || '';
-                const orderTotal = Number(order.total) || Number(order.grandTotal) || Number(order.amount) || 0;
+                const orderTotal = calculateOrderTotal(order);
                 const formattedDateTime = formatOrderDateTime(order);
 
                 const step = getStatusStep(orderStatus);
@@ -406,7 +438,7 @@
                 let itemsHtml = (order.items || []).map(i => `
                     <div class="flex justify-between text-xs py-1.5 border-b border-gray-100 dark:border-zinc-800/60 last:border-0">
                         <span class="text-gray-700 dark:text-zinc-300">${i.name || i.title || 'Item'} <span class="text-amber-800 dark:text-amber-400/80 font-semibold">(x${i.qty || i.quantity || 1})</span></span>
-                        <span class="font-semibold text-gray-800 dark:text-amber-200/90">RM ${((i.price || 0) * (i.qty || i.quantity || 1)).toFixed(2)}</span>
+                        <span class="font-semibold text-gray-800 dark:text-amber-200/90">RM ${((Number(i.price) || 0) * (Number(i.qty || i.quantity) || 1)).toFixed(2)}</span>
                     </div>
                 `).join('');
 
